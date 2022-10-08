@@ -1,0 +1,209 @@
+---
+title: "NYPD Shooting Incident Data Project"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Introduction
+
+For this project, the dataset "NYPD Shooting Incident Data (History)" was downloaded from the [data.gov](https://catalog.data.gov/dataset) website. 
+
+This data set includes information about incident shootings in the different precincts of the city, basic demographic data on the perpetrator and victim, as well as whether or not the incident was murder. More detailed information about the data set [at this link](https://www.opendatanetwork.com/dataset/data.cityofnewyork.us/833y-fsy8)
+
+After reviewing the imported data set, a few questions arose:
+
+How do the boroughs compare to one another in number of incidents and deaths? How have incident rates and deaths changed over time?
+
+
+## Importing Dataset and Initial Cleaning
+
+Import the appropriate libraries. For this project, we will be using `tidyverse` and `lubridate`
+
+To Read in Data, use 
+`url_in <- "FILE URL" `
+
+For this project, we will be using the data set from the following URL: [NYPD Shooting Incident Data (Historic)](https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD)
+
+Then, create a variable and read the csv file data into that variable
+
+`Incident_data_unfiltered <- read_csv(url_in)`
+
+We will be using `Incident_data_unfiltered` as the original data frame, and we will make other data frames as we clean the data.
+
+To see a preview of the data set, use:  
+
+`Incident_data_unfiltered`
+
+Or, you can see the data table by using: 
+
+`View(Incident_data_unfiltered)`
+
+
+```{r, results='hide'}
+library(tidyverse)
+library(lubridate)
+
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD" 
+Incident_data_unfiltered <- read_csv(url_in) 
+``` 
+
+
+For easier data management, we can remove rows that won't be needed or don't provide useful information. Print the names of the variables with the `print()` function. Decide which columns you would like to remove, and use `select(-c())` to specify which columns to *not* select when creating a "filtered" data frame `Incident_data`
+
+After looking at the data types of the columns, converting to appropriate types is helpful for data manipulation later on. 
+
+1. Column **OCCUR_DATE** is a character vector, and it will be easier to work with this data if it is a date vector type. To convert, use:
+
+`Incident_data %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))`
+
+2. Column **STATISTICAL_MURDER_FLAG** is a boolean logic type vector, and it would be helpful to have a numerical value for analysis. To change from TRUE/FALSE into a 1 or 0: 
+
+`Incident_data$STATISTICAL_MURDER_FLAG <- as.numeric(Incident_data$STATISTICAL_MURDER_FLAG)`
+
+
+```{r}
+print(colnames(Incident_data_unfiltered))
+Incident_data <- Incident_data_unfiltered %>%
+     select(-c("INCIDENT_KEY", "JURISDICTION_CODE",
+                 "X_COORD_CD","Y_COORD_CD", 
+                 "Lon_Lat"))
+
+Incident_data %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+
+Incident_data$STATISTICAL_MURDER_FLAG <- as.numeric(Incident_data$STATISTICAL_MURDER_FLAG)
+
+Incident_data
+```
+
+### Handling Missing Data: 
+
+The majority of the data that was missing was relating to the perpetrator demographic information. This is possibly explained by the theory that if a perpetrator was not caught and the victim is unable to recall such information, then there is no way to collect this information. 
+
+For this project, I created a new data frame after ommiting any row in `Incident_data` if it was missing a value. 
+
+`Incident_data_ommitted_na <- na.omit(Incident_data)`
+
+```{r, echo=FALSE}
+Incident_data_ommitted_na <- na.omit(Incident_data)
+Incident_data_ommitted_na  %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+Incident_data_ommitted_na
+```
+
+## Data Analysis: Visualizing, Analyzing, and Modeling the Data
+
+
+### Visualizing data: 
+
+Before advancing with the analysis, it is helpful to see what trends the data has. The easiest way to do this is to create a visual for the data. 
+
+To answer question number one, it is helpful to see the number of incidents reported by precinct.
+
+
+#### Number of Incidents by Precinct and Borough - 
+
+
+This graph shows the total count of incident reports by precinct from precinct #0 through #123. The colors represent the different boroughs of each precinct. 
+
+
+```{r}
+graph_incidents <-Incident_data %>% ggplot(aes(PRECINCT, fill = BORO)) + geom_bar() + 
+  theme(legend.position = "bottom", legend.key.size = unit(.20,"cm")) 
+graph_incidents
+
+graph_incidents2 <-Incident_data %>% ggplot(aes(BORO)) + geom_bar() + 
+  theme(legend.position = "bottom", legend.key.size = unit(.20,"cm")) 
+graph_incidents2 
+```
+
+#### Incidents vs. Deaths over time - 
+
+For this section, the graphs were made easier if a new data frame was created. 
+
+The new data frame was made from `Incident_data` data frame, and only a few variables were selected.
+
+`new_df_Incidents <- Incident_data %>% select("OCCUR_DATE","PRECINCT", 
+"BORO", "STATISTICAL_MURDER_FLAG")`
+
+The date was converted from a character vector to a date vector. 
+
+`new_df_Incidents %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))`
+
+These graphs show the patterns of Incidents over time.
+
+```{r}
+new_df_Incidents <- Incident_data %>% select("OCCUR_DATE","PRECINCT", 
+"BORO", "STATISTICAL_MURDER_FLAG")
+
+new_df_Incidents %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+
+graph_incidents_over_time <- new_df_Incidents%>% ggplot(aes(OCCUR_DATE, group = BORO, color = BORO)) + geom_bar(stat = "count") + theme(legend.position = "bottom", legend.key.size = unit(.25,"cm"))
+graph_incidents_over_time
+
+#other way of visualizing same data
+df4 <- Incident_data %>% group_by(OCCUR_DATE) %>% summarise(totals_by_boro2 = n())
+df4 <- df4 %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+graph_incidents_over_time2 <- df4 %>% ggplot(aes(OCCUR_DATE, totals_by_boro2)) +geom_bar(stat = "identity")
+
+df5 <- df4 %>% mutate(OCCUR_DATE = year(OCCUR_DATE))
+graph_df5 <- df5 %>% ggplot(aes(OCCUR_DATE, totals_by_boro2)) +geom_bar(stat = "identity")
+graph_df5
+
+
+```
+
+Lastly, a new data frame was created such that the new_df_Incidents was grouped by borough and date, and the variable "STATISTICAL_MURDER_FLAG" was added for each group to calculate deaths.
+
+`df2 <- Incident_data %>% group_by(BORO, STATISTICAL_MURDER_FLAG) %>% summarise(deaths_by_boro = n())`
+
+This graph shows trend of deaths by Borough.
+
+`graph_df2 <- df2 %>% ggplot(aes(BORO, deaths_by_boro, fill = STATISTICAL_MURDER_FLAG)) + geom_bar(stat = "identity") + theme(legend.position = "bottom", legend.key.size = unit(.25,"cm"))`
+
+```{r}
+
+df2 <- Incident_data %>% group_by(BORO, STATISTICAL_MURDER_FLAG) %>% summarise(deaths_by_boro = n())
+
+graph_df2 <- df2 %>% ggplot(aes(BORO, deaths_by_boro, fill = STATISTICAL_MURDER_FLAG)) + geom_bar(stat = "identity") + theme(legend.key.size = unit(.25,"cm"))
+
+graph_df2
+```
+
+### Data Analysis:
+
+The graphs provided insight into the data set. For example, Brooklyn has a higher number of shooting incidents but the Bronx borough has a higher number of deaths. 
+
+Looking at this data, questions regarding trends of incidents over time came to mind, like "were there certain events that may have had an effect on rates, such as an increase in police presence in communities, or community initiatives to reduce crime rates? 
+
+
+### Model
+
+I don't think that a model over my data for the number of incidents per year is appropriate because there is no correlation between one day and the next in terms of incident shootings. The model that I attempted to apply was linear, and did not fit the data well at all. 
+
+```{r}
+Incidents_overTime_model <- lm(OCCUR_DATE ~ totals_by_boro2, data = df5)
+
+summary(Incidents_overTime_model)
+
+df6  <- df5 %>% mutate(model_predictions = predict(Incidents_overTime_model))
+df6%>%
+    ggplot() +
+    geom_bar(aes(OCCUR_DATE, y=totals_by_boro2), stat = "identity") +
+    geom_point(aes(x=OCCUR_DATE, y=model_predictions),color = "red") 
+```
+
+### Sources of Bias
+
+
+When looking at the data and seeing the number of deaths when compared to number incidents, it might look like one borough has more deaths than the others. This is a biased interpretation of the data, since the number of incidents are different per borough, and each borough has a different population size. Perhaps percentage of incidents by population reflects a more accurate representation of crime rates by borough.
+
+Also, the number of deaths per borough can be due to reasons unrelated to the number of incidents such as:
+
+*  different levels of resources in each borough and how likely those services are to save a victim. 
+*  it could be due to more policing in areas such that incidents do not escalate and lead to death. 
+*  it could be deaths and incidents are reported differently by borough. 
+
+
+### Conclusion
+
+In conclusion, this project provided insight on how incident shootings and murder compare by borough and how the number of incidents compare over time for all the boroughs.
