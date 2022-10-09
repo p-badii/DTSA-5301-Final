@@ -1,0 +1,666 @@
+---
+title: "Reproducible Report on COVID19 Data"
+author: "P.Badilla"
+date: "2022-10-08"
+output:
+  html_document: default
+  pdf_document: default
+---
+## Introduction
+
+For this project, the data sets used were downloaded from a GitHub repository ["JHU CSSE COVID-19 Data"](https://github.com/CSSEGISandData/COVID-19). The "time series" data sets in the repository `csse_covid_19_data > csse_covid_19_time_series` were used. These data set include information about confirmed cases and confirmed deaths for the U.S. and globally. 
+
+[Confirmed cases in the U.S.](https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv) : time_series_covid19_confirmed_US.csv
+
+[Confirmed deaths in the U.S.](https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv): time_series_covid19_deaths_US.csv
+
+[Confirmed global cases](https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv) : time_series_covid19_confirmed_global.csv
+
+[Confirmed global deaths](https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv) : time_series_covid19_deaths_global.csv
+
+I will also need a population data file for the global cases and deaths. 
+[Global Population](https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv) : UID_ISO_FIPS_LookUp_Table.csv
+
+After review these data sets, a few questions of interest were:
+
+1. When did each country begin to have confirmed COVID-19 cases?
+2. When did each state in the U.S. begin to have confirmed COVID-19 cases?
+3. Which months had the highest number of confirmed cases and confirmed deaths for each country? 
+
+
+## Importing Dataset and Initial Cleaning
+
+Import the appropriate libraries. For this project, we will be using `tidyverse` and `lubridate`
+
+To Read in Data, use 
+`variable_name <- read_csv("FILE URL")`
+
+For this project, there are multiple files to import. I'll create a variable for each data set and read the csv file into that variable. 
+
+`US_cases <- read_csv(https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv)`
+
+`US_deaths <- read_csv(https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv)`
+
+`global_cases <- read_csv(https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv)`
+
+`global_deaths <- read_csv(https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv)`
+
+
+To ensure the data was imported correctly, it is important to preview it and understand its contents.To preview the data set, call the variable name. For example:  
+
+`US_cases`
+
+Or, you can see the data table by using the `View` function. For example: 
+
+`View(US_cases)`
+
+
+```{r, results='hide'}
+library(tidyverse)
+library(lubridate)
+
+US_cases <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+
+US_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+
+global_cases <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+
+global_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+
+global_population <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv")
+
+``` 
+
+
+For easier data management, we can remove columns that won't be needed or don't provide useful information. Print the names of the variables with the `print()` function. Decide which columns you would like to remove, and use `select(-c())` to specify which columns to *not* select when creating a "filtered" data frame for each variable.
+
+In this data set, most of the columns are the dates for which there are data about each state or country. Transposing each date column to be a row will make the data easier to work with and understand. I will also combine the cases and deaths data frames into one for US data and one for global data. Converting columns to appropriate types (like a `date` type instead of a `char` type for dates) will be helpful for data manipulation later on also. Lastly, modify the data frames so that both data frames have as many similar columns as possible.
+
+1. Use the `pivot_longer` function to transpose columns into rows
+
+2. Use the `full_join` function to combine data frames based on all columns that are identical in each data frame
+
+3. Use the `mutate` function to convert a character type column into a date type column
+
+4. Modify the global data frame to have the same format as the US data frame. This requires a union between the "Province_State, Country_Region" into a new column "Combined_key" as well as the addition of a "population" column. 
+
+To add the "Population column to the global data frame, I will need to import the population data. Luckily, the directory used above contains a csv file with the population information. This can be found [here]()
+
+```{r, results='hide'}
+print(colnames(US_cases))
+US_cases <- US_cases %>% 
+    pivot_longer(cols= -c('Province_State', 'Country_Region', 'UID', 'iso2', 'iso3', 'code3', 'FIPS', 'Lat', 'Long_', 'Admin2', 'Combined_Key'), 
+        names_to = "date", 
+        values_to = "cases") %>% 
+    select(-c(UID, iso2, iso3, code3, FIPS, Lat, Long_)) 
+
+
+print(colnames(US_deaths))
+US_deaths <- US_deaths %>% 
+    pivot_longer(cols= -c('Province_State', 'Country_Region', UID, iso2, iso3, code3, FIPS, Lat, Long_, Admin2, Combined_Key, Population), 
+        names_to = "date", 
+        values_to = "deaths") %>% 
+    select(-c(UID, iso2, iso3, code3, FIPS, Lat, Long_))
+
+US_combined <- US_cases %>% full_join(US_deaths) %>%
+  mutate(date = mdy(date))
+
+
+
+print(colnames(global_cases))
+global_cases <- global_cases %>% 
+    pivot_longer(cols= -c('Province/State', 'Country/Region', Lat, Long), 
+        names_to = "date", 
+        values_to = "cases") %>% 
+    select(-c(Lat,Long)) 
+
+
+print(colnames(global_deaths))
+global_deaths <- global_deaths %>% 
+    pivot_longer(cols= -c('Province/State', 'Country/Region', Lat, Long), 
+        names_to = "date", 
+        values_to = "deaths") %>% 
+    select(-c(Lat,Long)) 
+
+
+global_combined <- global_cases %>% full_join(global_deaths) %>%
+  rename(Country_Region = 'Country/Region', Province_State = 'Province/State') %>%
+  mutate(date = mdy(date))
+
+
+global_combined <- global_combined %>%
+  unite("Combined_key",
+        c(Province_State, Country_Region),
+        sep = ", ",
+        na.rm = TRUE,
+        remove = FALSE)
+
+global_population <- global_population %>% 
+  select(-c(Admin2,Lat,Long_,Combined_Key,iso2,iso3,code3))
+
+global <- global_combined %>% 
+  left_join(global_population, by = c("Province_State", "Country_Region")) %>% 
+  select(-c(UID,FIPS)) %>%
+  select(Province_State,Country_Region, date, cases, deaths, Population,Combined_key) 
+  
+#global <- global %>% mutate(date = mdy(date))
+
+```
+
+
+### Summary of data and Filtering: 
+
+To see if data frames are as expected, view each frame. Then, call the `summary()` function to review a brief summary of each data frame. 
+
+`summary(US_combined)`
+`summary(global)`
+
+The summary revealed that the "minimum" number of cases was "0" and the date for that minimum was on 2020-01-22. Since it is obvious that 0 is the minimum number of cases in the data set, I will filter out any dates for which the number of cases is 0. I will not filter based on deaths because there could be dates in which there are many cases, but no deaths. That is useful data that I do not want to leave out. 
+
+
+```{r}
+summary(US_combined)
+summary(global)
+
+US_combined <- US_combined %>% filter(cases>0)
+global <- global %>% filter(cases>0)
+
+```
+
+
+## Data Analysis: Visualizing, Analyzing, and Modeling the Data
+
+Revisiting the questions of interest:
+
+1. When did each country begin to have confirmed COVID-19 cases?
+2. When did each state in the U.S. begin to have confirmed COVID-19 cases?
+3. Which date had the highest number of confirmed cases and confirmed deaths across all countries? 
+
+```{r}
+global_by_country <- global %>%
+  group_by(Province_State, Country_Region, date) %>%
+  summarise(cases = sum(cases), deaths = sum(deaths), Population = sum(Population))
+
+
+US_by_state <- US_combined %>%
+  group_by(Province_State, date) %>%
+  summarise(cases = sum(cases), deaths = sum(deaths), Population = sum(Population))
+```
+
+
+### Visualizing data: 
+
+question 1:
+create a new frame that is sorted by date, and plot the first date for each country.
+
+```{r}
+global_first_case_date <- global_by_country %>% arrange(date)
+country_first_date <- global_first_case_date[match(unique(global_first_case_date$Country_Region), global_first_case_date$Country_Region ),]
+```
+
+```{r, echo=FALSE}
+#remove "winter olympics" and "summer olympics" from data frame 
+country_first_date <- country_first_date[-c(194,198),]
+country_first_date_group1 <- country_first_date[(1:62),]
+country_first_date_group2 <- country_first_date[(63:134),]
+country_first_date_group3 <- country_first_date[(135:187),]
+country_first_date_group4 <- country_first_date[(188:195),]
+
+df <-country_first_date_group1
+#
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plot1<-ggplot(df,aes(x=date,y=0, label=Country_Region))
+timeline_plot1<-timeline_plot1+labs(col="Country_Region")
+timeline_plot1<-timeline_plot1+scale_color_manual(drop = FALSE)
+timeline_plot1<-timeline_plot1+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plot1<-timeline_plot1+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plot1<-timeline_plot1+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plot1<-timeline_plot1+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plot1<-timeline_plot1+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plot1<-timeline_plot1+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plot1<-timeline_plot1+geom_text(aes(y=text_position,label=Country_Region),size=2.0)
+timeline_plot1
+
+############################################
+df <-country_first_date_group2
+
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plot2<-ggplot(df,aes(x=date,y=0, label=Country_Region))
+timeline_plot2<-timeline_plot2+labs(col="Country_Region")
+timeline_plot2<-timeline_plot2+scale_color_manual(drop = FALSE)
+timeline_plot2<-timeline_plot2+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plot2<-timeline_plot2+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plot2<-timeline_plot2+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plot2<-timeline_plot2+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plot2<-timeline_plot2+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plot2<-timeline_plot2+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plot2<-timeline_plot2+geom_text(aes(y=text_position,label=Country_Region),size=2.0)
+timeline_plot2
+
+######################################
+df <-country_first_date_group3
+
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plot3<-ggplot(df,aes(x=date,y=0, label=Country_Region))
+timeline_plot3<-timeline_plot3+labs(col="Country_Region")
+timeline_plot3<-timeline_plot3+scale_color_manual(drop = FALSE)
+timeline_plot3<-timeline_plot3+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plot3<-timeline_plot3+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plot3<-timeline_plot3+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plot3<-timeline_plot3+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plot3<-timeline_plot3+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plot3<-timeline_plot3+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plot3<-timeline_plot3+geom_text(aes(y=text_position,label=Country_Region),size=2.0)
+timeline_plot3
+
+
+##########################
+df <-country_first_date_group4
+
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plot4<-ggplot(df,aes(x=date,y=0, label=Country_Region))
+timeline_plot4<-timeline_plot4+labs(col="Country_Region")
+timeline_plot4<-timeline_plot4+scale_color_manual(drop = FALSE)
+timeline_plot4<-timeline_plot4+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plot4<-timeline_plot4+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plot4<-timeline_plot4+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plot4<-timeline_plot4+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plot4<-timeline_plot4+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plot4<-timeline_plot4+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plot4<-timeline_plot4+geom_text(aes(y=text_position,label=Country_Region),size=2.0)
+timeline_plot4
+
+
+
+```
+
+question 2:
+do same as above but for US data
+
+```{r,echo=FALSE}
+US_first_case_date <- US_by_state %>% arrange(US_by_state$date)
+state_first_date <- US_first_case_date[match(unique(US_first_case_date$Province_State), US_first_case_date$Province_State ),]
+state_first_date <- state_first_date[-c(58),]
+state_first_date_group1 <- state_first_date[(1:28),]
+state_first_date_group2 <- state_first_date[(29:57),]
+
+
+df <-state_first_date_group1 
+#
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plotUS1<-ggplot(df,aes(x=date,y=0, label=Province_State))
+timeline_plotUS1<-timeline_plotUS1+labs(col="Province_State")
+timeline_plotUS1<-timeline_plotUS1+scale_color_manual(drop = FALSE)
+timeline_plotUS1<-timeline_plotUS1+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plotUS1<-timeline_plotUS1+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plotUS1<-timeline_plotUS1+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plotUS1<-timeline_plotUS1+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plotUS1<-timeline_plotUS1+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plotUS1<-timeline_plotUS1+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plotUS1<-timeline_plotUS1+geom_text(aes(y=text_position,label=Province_State),size=2.0)
+timeline_plotUS1
+
+############################################
+df <-state_first_date_group2
+
+positions <- c(1.0, -1.0, 2.0, -2.0, 3.0, -3.0)
+directions <- c(1, -1)
+line_pos <- data.frame(
+    "date"=unique(df$date),
+    "position"=rep(positions, length.out=length(unique(df$date))),
+    "direction"=rep(directions, length.out=length(unique(df$date))) 
+    )
+
+df <- merge(x=df, y=line_pos, by="date", all = TRUE)
+df <- df[with(df, order(date)), ]
+
+
+month_date_range <- seq(min(df$date), max(df$date), by='month')
+month_format <- format(month_date_range, '%b-%d-%Y')
+month_df <- data.frame(month_date_range, month_format)
+
+year_date_range <- seq(min(df$date), max(df$date), by='year')
+year_date_range <- as.Date(
+    intersect(
+        ceiling_date(year_date_range, unit="year"),
+        floor_date(year_date_range, unit="year")),  
+    origin = "1970-01-01")
+year_format <- format(year_date_range, '%Y')
+year_df <- data.frame(year_date_range, year_format)
+
+text_offset <- 0.1
+df$month_count <- ave(df$date==df$date, df$date, FUN=cumsum)
+df$text_position <- (df$month_count * text_offset * df$direction) + df$position
+
+timeline_plotUS2<-ggplot(df,aes(x=date,y=0, label=Province_State))
+timeline_plotUS2<-timeline_plotUS2+labs(col="Province_State")
+timeline_plotUS2<-timeline_plotUS2+scale_color_manual(drop = FALSE)
+timeline_plotUS2<-timeline_plotUS2+theme_classic()
+
+# Plot horizontal black line for timeline
+timeline_plotUS2<-timeline_plotUS2+geom_hline(yintercept=0, color = "black", size=0.3)
+# Plot vertical segment lines for milestones
+timeline_plotUS2<-timeline_plotUS2+geom_segment(data=df[df$month_count == 1,], aes(y=position,yend=0,xend=date), color='black', size=0.2)
+# Plot scatter points at zero and date
+timeline_plotUS2<-timeline_plotUS2+geom_point(aes(y=0), size=.25)
+# Don't show axes, appropriately position legend
+timeline_plotUS2<-timeline_plotUS2+theme(axis.line.y=element_blank(),
+                 axis.text.y=element_blank(),
+                 axis.title.x=element_blank(),
+                 axis.title.y=element_blank(),
+                 axis.ticks.y=element_blank(),
+                 axis.text.x =element_blank(),
+                 axis.ticks.x =element_blank(),
+                 axis.line.x =element_blank(),
+                 legend.position = "bottom"
+                )
+# Show text for each month
+timeline_plotUS2<-timeline_plotUS2+geom_text(data=month_df, aes(x=month_date_range,y=-0.5,label=month_format),size=2.5,vjust=0.5, color='red', angle=90)
+
+# Show year text
+#timeline_plot<-timeline_plot+geom_text(data=year_df, aes(x=year_date_range,y=-1,label=year_format, fontface="bold"),size=2.5, color='blue')
+#timeline_plot
+# Show text for each milestone
+timeline_plotUS2<-timeline_plotUS2+geom_text(aes(y=text_position,label=Province_State),size=2.0)
+timeline_plotUS2
+
+
+```
+
+----------
+question 3:  To answer question 3, we must look at the number of cases and deaths for all countries by date
+```{r}
+global_cases_CountryDate <- global %>%
+  group_by(Country_Region, date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>%
+  mutate(deaths_per_million = deaths * 1000000 / Population) %>%
+  mutate(cases_per_million = cases * 1000000 / Population)
+
+global_cases_by_date <- global %>%
+  group_by(date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths)) 
+  
+
+g1 <- global_cases_by_date %>%
+    ggplot(aes(x=date)) +
+    geom_line(aes(y = cases, color = "cases")) +
+    labs(title = "COVID-19 Global Cases Over Time", y = "cases")
+
+g2 <- global_cases_by_date %>%
+    ggplot(aes(x=date)) +
+    geom_line(aes(y=deaths, color = "deaths"))+
+    labs(title = "COVID-19 Global Deaths Over Time", y = "deaths")
+   
+g1
+g2
+```
+
+##Model
+
+The linear model of deaths by cases seemed to be similar to an exponential function. Therefore, for my model, I used an inverse exponential (square root) function. Looking at a summary of the prediction  model, the model was very close to the actual number of deaths when comparing the 1st quartile, mean, median, and 3rd quartile. 
+
+```{r}
+
+mod <- lm(deaths ~ I(cases^0.5), data = global_cases_by_date)
+#mod <- lm(deaths ~ cases, data = global_cases_by_date)
+ggplot(global_cases_by_date, aes(x=cases, y=deaths)) + 
+  geom_line() +
+  geom_line(aes(x=cases, y=fitted(mod)), color = "red")
+
+model <- global_cases_by_date %>% mutate(pred = predict(mod))
+summary(model)
+```
+
+
+### Sources of Bias
+
+Sources of bias in this data set could include:
+
+* Accuracy in when each country reported their first confirmed case
+* Which countries/regions were more likely to test for COVID in the early stages of the pandemic (i.e. some countries did not feel they were at risk and didn't test those who entered from traveling abroad, which could have affected how early they got a confirmed case) 
+* How many cases were confirmed and reported during the beginning of COVID considering how difficult it was to get a test at the time
+
+
+### Conclusion 
+
+In conclusion, this data analysis provided insight to a timeline of when each country began to experience confirmed COVID cases and how each state in the US compares on this time line as well. 
